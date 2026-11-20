@@ -18,7 +18,11 @@ namespace Review {
 
 namespace {
 
-QString cacheKey(const Matcher::Finding &f) { return f.cve + "@" + f.package + "@" + f.version; }
+// System findings keep the key they had before other layers existed, so
+// answers given then still count.
+QString cacheKey(const Matcher::Finding &f) {
+    return f.layer == "system" ? f.cve + "@" + f.package + "@" + f.version : f.id();
+}
 
 // lib32-x is the 32-bit build of x: an answer for x at the same upstream
 // version is reused for it (on 2026-11-20, glibc and lib32-glibc took a call
@@ -67,7 +71,7 @@ QJsonObject addExposure(QList<Matcher::Finding> &findings, const QList<Inventory
 
     QStringList affected;
     for (Matcher::Finding &f : findings) {
-        if (f.verdict != "affected")
+        if (f.verdict != "affected" || f.layer != "system")
             continue;
         if (!affected.contains(f.package))
             affected << f.package;
@@ -129,6 +133,8 @@ QHash<QString, QString> pendingUpdates(QString *error) {
 
 void addUpdates(QList<Matcher::Finding> &findings, const QHash<QString, QString> &pending) {
     for (Matcher::Finding &f : findings) {
+        if (f.layer != "system")
+            continue;
         const QString next = pending.value(f.package);
         if (next.isEmpty())
             continue;
@@ -165,7 +171,7 @@ TriageRun triage(QList<Matcher::Finding> &findings, const QJsonObject &exposure,
             ++run.cached;
             continue;
         }
-        open[f.package].append(i);
+        open[f.groupKey()].append(i);
     }
     QStringList order = open.keys();
     auto top = [&](const QString &p) {
@@ -204,11 +210,10 @@ TriageRun triage(QList<Matcher::Finding> &findings, const QJsonObject &exposure,
                 batch << findings.at(indexes.at(j));
             const QString summary = exposure.value(package).toObject().value("summary").toString();
             log << "Asking Claude about " << batch.size() << " CVE" << (batch.size() == 1 ? "" : "s") << " in "
-                << package << "...\n";
+                << batch.first().package << "...\n";
             log.flush();
             const Triage::Answer answer =
-                Triage::ask(claude, model, Triage::question(package, batch.first().version, summary, batch),
-                            Paths::state() + "/triage-work");
+                Triage::ask(claude, model, Triage::question(batch, summary), Paths::state() + "/triage-work");
             ++run.calls;
             run.seconds += answer.seconds;
             if (answer.costUsd > 0)

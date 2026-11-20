@@ -11,7 +11,10 @@ CVEs, works out what the machine uses, and has Claude triage the rest.
 Every command exits 0 on success and 1 with the problem on stderr.
 
 - `ward status --json`: the last check, without a new one. `findings` holds
-  one object per CVE and package: `cve`, `package`, `version`, `verdict`
+  one object per CVE and package: `layer` (absent for pacman packages;
+  `project`, `docker` or `firmware` otherwise, with `component` the
+  vulnerable dependency or library, `location` the project's path or the
+  image id, `ecosystem` and `advisory`), `cve`, `package`, `version`, `verdict`
   (`affected`, or `unknown` when the record's versions can't be read),
   `match` (`tracker`, `vendor`, `name`: how sure the match is), `kev`,
   `score`, `fixedIn`, `updateTo` (a fixing update waiting in the repos),
@@ -24,8 +27,10 @@ Every command exits 0 on success and 1 with the problem on stderr.
   CVE list (the first run downloads 669 MB once) and asks Claude about at
   most 10 batches of new findings; `--no-triage` asks nothing.
 - `ward show <CVE-ID>`: one record, with every product and range it names.
-- `ward fix <package>`: what would fix it. Ward prints commands and never
-  runs them; run one only when the user asks.
+- `ward fix <name>`: what would fix a package, project, image or device.
+  Ward prints commands and never runs them; run one only when the user asks.
+  `layers` in the status says what was checked: projects (files read,
+  packages, how many have advisories), firmware, and Docker (or why not).
 
 Matches are by version, so a patched Arch build can still match; read
 `applies` and `why` before telling the user they are exposed. Results live in

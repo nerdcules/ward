@@ -31,8 +31,8 @@ struct Answer {
 
 // The system prompt, and the question for one package's findings.
 QString systemPrompt();
-QString question(const QString &package, const QString &version, const QString &exposure,
-                 const QList<Matcher::Finding> &findings);
+// `findings` are one group's (one package, project, image or device).
+QString question(const QList<Matcher::Finding> &findings, const QString &exposure);
 
 // Reads `claude -p --output-format json` output: its "result" must hold the
 // JSON object the system prompt asks for (a ```json fence is tolerated).

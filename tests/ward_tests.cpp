@@ -16,6 +16,10 @@
 #include "../src/cve5.h"
 #include "../src/backend.h"
 #include "../src/cvelist.h"
+#include "../src/docker.h"
+#include "../src/firmware.h"
+#include "../src/osv.h"
+#include "../src/projects.h"
 #include "../src/notifier.h"
 #include "../src/report.h"
 #include "../src/translator.h"
@@ -465,6 +469,177 @@ private slots:
         }
         QVERIFY(seen > 50);
         QVERIFY2(missing.isEmpty(), qPrintable("untranslated: " + missing.join(" | ")));
+    }
+
+    // ------------------------------------------------ step 3: other layers
+
+    // Made-up lockfiles in each tool's own format.
+    void projectLockfiles() {
+        const QByteArray npm = R"({"lockfileVersion": 3, "packages": {
+            "": {"name": "app", "version": "1.0.0"},
+            "node_modules/undici": {"version": "7.25.0"},
+            "node_modules/a/node_modules/@scope/b": {"version": "2.0.0", "dev": true},
+            "node_modules/local": {"resolved": "../local", "link": true},
+            "packages/x": {"name": "x", "version": "0.1.0"}}})";
+        auto deps = Projects::parseNpmLock(npm, "/p", "/p/package-lock.json");
+        QStringList got;
+        for (const auto &d : deps)
+            got << d.name + "@" + d.version + (d.dev ? " dev" : "");
+        got.sort();
+        QCOMPARE(got, QStringList({"@scope/b@2.0.0 dev", "undici@7.25.0", "x@0.1.0"}));
+
+        const QByteArray v1 = R"({"lockfileVersion": 1, "dependencies": {
+            "a": {"version": "1.0.0", "dependencies": {"b": {"version": "2.0.0", "dev": true}}},
+            "c": {"version": "file:../c"}}})";
+        QCOMPARE(Projects::parseNpmLock(v1, "/p", "f").size(), 2);
+
+        const QByteArray assets = R"({"libraries": {
+            "Newtonsoft.Json/13.0.1": {"type": "package"},
+            "MyLib/1.0.0": {"type": "project"}}})";
+        deps = Projects::parseAssets(assets, "/p", "f");
+        QCOMPARE(deps.size(), 1);
+        QCOMPARE(deps.first().ecosystem, QString("NuGet"));
+        QCOMPARE(deps.first().version, QString("13.0.1"));
+
+        const QString cargo = "[[package]]\nname = \"serde\"\nversion = \"1.0.0\"\nsource = \"registry+https://github.com/rust-lang/crates.io-index\"\n\n"
+                              "[[package]]\nname = \"mine\"\nversion = \"0.1.0\"\n";
+        deps = Projects::parseCargoLock(cargo, "/p", "f");
+        QCOMPARE(deps.size(), 1); // the path crate isn't in crates.io
+        QCOMPARE(deps.first().name, QString("serde"));
+
+        const QString req = "requests==2.31.0\n# comment\nflask>=2\nuvicorn[standard]==0.30.1\n-r other.txt\n";
+        deps = Projects::parseRequirements(req, "/p", "f");
+        QCOMPARE(deps.size(), 2);
+        QCOMPARE(deps.at(1).name, QString("uvicorn"));
+    }
+
+    void projectScanSkipsBuildOutput() {
+        QTemporaryDir dir;
+        auto write = [&](const QString &rel, const QByteArray &text) {
+            QDir().mkpath(QFileInfo(dir.filePath(rel)).absolutePath());
+            QFile f(dir.filePath(rel));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(text);
+        };
+        const QByteArray lock = R"({"lockfileVersion": 3, "packages": {"node_modules/x": {"version": "1.0.0"}}})";
+        write("web/package-lock.json", lock);
+        write("web/node_modules/y/package-lock.json", lock);  // inside node_modules
+        write("api/Api/obj/project.assets.json", R"({"libraries": {"A/1.0.0": {"type": "package"}}})");
+        write("api/out/copy/obj/project.assets.json", R"({"libraries": {"B/1.0.0": {"type": "package"}}})");
+        const Projects::Scan scan = Projects::scan({dir.path()});
+        QCOMPARE(scan.files.size(), 2);
+        QStringList projects;
+        for (const auto &d : scan.dependencies)
+            projects << QFileInfo(d.project).fileName();
+        projects.sort();
+        QCOMPARE(projects, QStringList({"Api", "web"})); // obj's owner is the folder above it
+    }
+
+    // GHSA-2m5v-pch6-74hx as OSV served it on 20 Nov 2026: undici fixed in
+    // 6.29.1, 7.30.1 and 8.12.2, one range per branch.
+    void osvAdvisory() {
+        const Osv::Advisory a = Osv::parse(QJsonDocument::fromJson(fixture("GHSA-2m5v-pch6-74hx.json")).object());
+        QCOMPARE(a.id, QString("GHSA-2m5v-pch6-74hx"));
+        QCOMPARE(a.aliases, QStringList({"CVE-2026-109383"}));
+        QCOMPARE(a.severity, QString("HIGH"));
+        QCOMPARE(Osv::fixedVersion(a, "npm", "undici", "7.25.0"), QString("7.30.1"));
+        QCOMPARE(Osv::fixedVersion(a, "npm", "undici", "6.1.0"), QString("6.29.1"));
+        QVERIFY(Osv::fixedVersion(a, "npm", "other", "7.25.0").isEmpty());
+    }
+
+    void projectFindingsAreKeyedByLocation() {
+        Matcher::Finding a;
+        a.layer = "project";
+        a.cve = "CVE-1";
+        a.package = "Foundry.Core";
+        a.location = "/home/u/foundry/src/Foundry.Core";
+        a.component = "System.Text.Json";
+        a.version = "8.0.0";
+        Matcher::Finding b = a;
+        b.location = "/home/u/foundry-pr33/src/Foundry.Core"; // a copy with the same folder name
+        QVERIFY(a.groupKey() != b.groupKey());
+        QVERIFY(a.id() != b.id());
+        const Matcher::Finding back = Matcher::Finding::fromJson(a.toJson());
+        QCOMPARE(back.layer, QString("project"));
+        QCOMPARE(back.id(), a.id());
+        Matcher::Finding sys;
+        sys.cve = "CVE-2";
+        sys.package = "openssh";
+        QCOMPARE(sys.id(), QString("CVE-2@openssh")); // unchanged, so earlier answers still match
+        QCOMPARE(Matcher::Finding::fromJson(sys.toJson()).layer, QString("system"));
+        QVERIFY(!sys.toJson().contains("layer"));
+    }
+
+    void triageQuestionSaysWhatAProjectIs() {
+        Matcher::Finding f;
+        f.layer = "project";
+        f.cve = "CVE-2026-109383";
+        f.advisory = "GHSA-2m5v-pch6-74hx";
+        f.package = "web";
+        f.location = "/home/u/Projects/web";
+        f.component = "undici";
+        f.version = "7.25.0";
+        f.ecosystem = "npm";
+        f.fixedIn = "7.30.1";
+        f.reason = "GHSA-2m5v-pch6-74hx lists undici 7.25.0 as affected";
+        const QString q = Triage::question({f}, "a project in /home/u/Projects/web");
+        QVERIFY(q.contains("dependencies of the software project at /home/u/Projects/web"));
+        QVERIFY(q.contains("in: undici 7.25.0 (npm)"));
+        QVERIFY(q.contains("record: GHSA-2m5v-pch6-74hx"));
+        QVERIFY(q.contains("fixed in 7.30.1"));
+        QVERIFY(!q.contains("an Arch package"));
+    }
+
+    // Made-up fwupd output in its JSON shape: one device with a release that
+    // lists two CVEs, one without.
+    void firmwareUpdates() {
+        QTemporaryDir dir;
+        Store store(dir.filePath("cve.sqlite"));
+        QVERIFY(store.open(nullptr));
+        const QByteArray devices = R"({"Devices": [{"Name": "System Firmware"}, {"Name": "SSD"}]})";
+        const QByteArray updates = R"({"Devices": [
+            {"Name": "System Firmware", "DeviceId": "abc", "Vendor": "Example", "Version": "1.10",
+             "Releases": [{"Version": "1.12", "Summary": "Security fixes", "Issues": ["CVE-2026-1111", "CVE-2026-2222", "INTEL-SA-1"]}]},
+            {"Name": "SSD", "DeviceId": "def", "Version": "2", "Releases": [{"Version": "3", "Issues": []}]}]})";
+        const QByteArray remotes = R"({"Remotes": [{"Id": "lvfs", "Mtime": 1793777754}]})";
+        const Firmware::Run run = Firmware::parse(devices, updates, remotes, store, {});
+        QCOMPARE(run.devices, 2);
+        QCOMPARE(run.updates, 2);
+        QCOMPARE(run.findings.size(), 2);
+        QCOMPARE(run.findings.first().layer, QString("firmware"));
+        QCOMPARE(run.findings.first().updateTo, QString("1.12"));
+        QCOMPARE(run.metadataDate.left(10), QString("2026-11-04"));
+    }
+
+    // Made-up docker and trivy output in their JSON shapes.
+    void dockerImages() {
+        const QByteArray images =
+            "{\"ID\":\"sha256:aaa111\",\"Repository\":\"postgres\",\"Tag\":\"16\"}\n"
+            "{\"ID\":\"sha256:aaa111\",\"Repository\":\"pg\",\"Tag\":\"latest\"}\n"
+            "{\"ID\":\"sha256:bbb222bbb222bbb\",\"Repository\":\"<none>\",\"Tag\":\"<none>\"}\n";
+        const QByteArray containers = "sha256:aaa111 running /db\nsha256:bbb222bbb222bbb exited /old\n";
+        const auto list = Docker::parseImages(images, containers);
+        QCOMPARE(list.size(), 2);
+        QCOMPARE(list.at(0).ref, QString("postgres:16")); // its first name
+        QCOMPARE(list.at(0).running, QStringList({"db"}));
+        QCOMPARE(list.at(1).ref, QString("bbb222bbb222"));
+        QCOMPARE(Docker::exposureSummary(list.at(1)), QString("not running; stopped container old uses it"));
+
+        QTemporaryDir dir;
+        Store store(dir.filePath("cve.sqlite"));
+        QVERIFY(store.open(nullptr));
+        const QByteArray trivy = R"json({"Results": [{"Target": "postgres:16 (debian 12.5)", "Type": "debian",
+            "Vulnerabilities": [{"VulnerabilityID": "CVE-2026-3333", "PkgName": "openssl", "InstalledVersion": "3.0.11-1",
+                                 "FixedVersion": "3.0.15-1, 3.0.16-1", "Severity": "HIGH", "Title": "t",
+                                 "CVSS": {"nvd": {"V3Score": 7.5}}}]}]})json";
+        auto running = Docker::parseTrivy(trivy, list.at(0), store, {});
+        QCOMPARE(running.size(), 1);
+        QCOMPARE(running.first().fixedIn, QString("3.0.15-1"));
+        QCOMPARE(running.first().score, 7.5);
+        QVERIFY(running.first().applies.isEmpty()); // a running image goes to triage
+        auto idle = Docker::parseTrivy(trivy, list.at(1), store, {});
+        QCOMPARE(idle.first().applies, QString("unclear"));
+        QCOMPARE(idle.first().triagedBy, QString("ward"));
     }
 
     void archTrackerDecides() {

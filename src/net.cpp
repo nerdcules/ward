@@ -47,6 +47,21 @@ QByteArray get(const QUrl &url, QString *error, int *status) {
     return body;
 }
 
+QByteArray postJson(const QUrl &url, const QByteArray &json, QString *error, int *status) {
+    QNetworkAccessManager manager;
+    QNetworkRequest r = request(url);
+    r.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    QNetworkReply *reply = manager.post(r, json);
+    QEventLoop loop;
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+    QByteArray body;
+    if (finish(reply, error, status))
+        body = reply->readAll();
+    reply->deleteLater();
+    return body;
+}
+
 bool download(const QUrl &url, const QString &path, QString *error, int *status) {
     QFile file(path + ".part");
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {

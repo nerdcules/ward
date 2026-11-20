@@ -30,19 +30,37 @@ QString systemPrompt() {
         "\"now|soon|later\", \"why\": \"...\"}], \"mitigation\": \"\"}");
 }
 
-QString question(const QString &package, const QString &version, const QString &exposure,
-                 const QList<Matcher::Finding> &findings) {
+QString question(const QList<Matcher::Finding> &findings, const QString &exposure) {
+    const Matcher::Finding &first = findings.first();
     QString q;
     q += QString("Machine: Omarchy (Arch Linux based), %1, glibc, systemd, PAM; a single-user laptop.\n")
              .arg(QSysInfo::currentCpuArchitecture());
-    q += QString("Package: %1 %2\n").arg(package, version);
-    q += QString("On this machine: %1\n\n").arg(exposure);
+    if (first.layer == "project")
+        q += QString("What: dependencies of the software project at %1, read from its lockfile or restore "
+                     "output. They only run when that project is built, tested or run from this machine.\n")
+                 .arg(first.location);
+    else if (first.layer == "docker")
+        q += QString("What: libraries inside the local Docker image %1. They only run inside its containers.\n")
+                 .arg(first.package);
+    else if (first.layer == "firmware")
+        q += QString("What: firmware of the device %1 (%2), version %3; the vendor's newer release says it "
+                     "fixes these.\n")
+                 .arg(first.package, first.vendor, first.version);
+    else
+        q += QString("Package: %1 %2 (an Arch package)\n").arg(first.package, first.version);
+    q += QString("On this machine: %1\n\n").arg(exposure.isEmpty() ? QString("nothing more is known") : exposure);
     for (const Matcher::Finding &f : findings) {
-        q += QString("%1 (score %2%3, published %4)\n")
+        q += QString("%1 (score %2%3%4, published %5)\n")
                  .arg(f.cve, f.score >= 0 ? QString::number(f.score, 'f', 1) : "none",
+                      f.severity.isEmpty() ? QString() : ", " + f.severity,
                       f.kev ? ", on CISA's list of exploited vulnerabilities" : "", f.published.left(10));
-        q += QString("  record: %1 / %2; matched because %3%4\n")
-                 .arg(f.vendor.isEmpty() ? "Arch tracker" : f.vendor, f.product.isEmpty() ? package : f.product,
+        if (!f.component.isEmpty())
+            q += QString("  in: %1 %2%3\n")
+                     .arg(f.component, f.version, f.ecosystem.isEmpty() ? QString() : " (" + f.ecosystem + ")");
+        q += QString("  record: %1; matched because %2%3\n")
+                 .arg(!f.advisory.isEmpty() ? f.advisory
+                      : f.vendor.isEmpty() ? QString("Arch tracker")
+                                           : f.vendor + " / " + (f.product.isEmpty() ? f.package : f.product),
                       f.reason, f.fixedIn.isEmpty() ? "" : "; fixed in " + f.fixedIn);
         if (!f.where.isEmpty())
             q += QString("  kernel code: %1 (%2)\n").arg(f.files.join(", ").left(200), f.where);

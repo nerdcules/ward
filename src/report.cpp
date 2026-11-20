@@ -14,9 +14,14 @@ QList<PackageSummary> byPackage(const QJsonArray &list) {
         const Matcher::Finding f = Matcher::Finding::fromJson(v.toObject());
         if (f.verdict != "affected")
             continue;
-        PackageSummary &s = map[f.package];
+        PackageSummary &s = map[f.groupKey()];
+        s.group = f.groupKey();
+        s.layer = f.layer;
         s.package = f.package;
-        s.version = f.version;
+        s.location = f.location;
+        // A project's or image's own version means nothing; its findings
+        // each name the component's.
+        s.version = f.layer == "system" || f.layer == "firmware" ? f.version : QString();
         s.kernel = f.kernel;
         ++s.count;
         s.kev += f.kev;
@@ -30,7 +35,8 @@ QList<PackageSummary> byPackage(const QJsonArray &list) {
             ++s.dismissed;
         if (!f.updateTo.isEmpty())
             s.updateTo = f.updateTo;
-        if (!f.fixedIn.isEmpty() && (s.fixAll.isEmpty() || Cve5::compareUpstream(f.fixedIn, s.fixAll) > 0))
+        if ((f.layer == "system" || f.layer == "firmware") && !f.fixedIn.isEmpty() &&
+            (s.fixAll.isEmpty() || Cve5::compareUpstream(f.fixedIn, s.fixAll) > 0))
             s.fixAll = f.fixedIn;
     }
     QList<PackageSummary> out = map.values();
@@ -43,13 +49,23 @@ QList<PackageSummary> byPackage(const QJsonArray &list) {
             return a.kev > b.kev;
         if (a.count != b.count)
             return a.count > b.count;
-        return a.package < b.package;
+        return a.group < b.group;
     });
     return out;
 }
 
 Totals totals(const QJsonArray &list) {
     Totals t;
+    for (const PackageSummary &s : byPackage(list)) {
+        if (s.layer == "project")
+            ++t.projects;
+        else if (s.layer == "docker")
+            ++t.images;
+        else if (s.layer == "firmware")
+            ++t.devices;
+        else
+            ++t.packages;
+    }
     for (const QJsonValue &v : list) {
         const Matcher::Finding f = Matcher::Finding::fromJson(v.toObject());
         if (f.verdict != "affected") {

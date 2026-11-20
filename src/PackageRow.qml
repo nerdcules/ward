@@ -30,10 +30,14 @@ Rectangle {
             Label { Layout.fillWidth: true; text: row.entry.package; color: theme.text; font.pixelSize: 14; elide: Text.ElideRight }
             Label {
                 Layout.fillWidth: true
-                text: row.entry.updateTo !== "" ? qsTr("%1 · fix waiting: %2").arg(row.entry.version).arg(row.entry.updateTo) : row.entry.version
+                text: row.entry.layer === "project" ? qsTr("project · %1").arg(row.entry.location)
+                    : row.entry.layer === "docker" ? qsTr("Docker image")
+                    : row.entry.layer === "firmware" ? qsTr("firmware %1").arg(row.entry.version)
+                    : row.entry.updateTo !== "" ? qsTr("%1 · fix waiting: %2").arg(row.entry.version).arg(row.entry.updateTo)
+                    : row.entry.version
                 color: row.entry.updateTo !== "" ? theme.good : theme.muted
                 font.pixelSize: 12
-                elide: Text.ElideRight
+                elide: row.entry.layer === "project" ? Text.ElideMiddle : Text.ElideRight
             }
         }
         StatusPill { visible: row.entry.now > 0; text: qsTr("%n now", "", row.entry.now); color: theme.bad; foreground: "black" }

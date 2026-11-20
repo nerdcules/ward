@@ -55,7 +55,29 @@ struct Finding {
     QString applies, priority, why, triagedBy;
     QString updateTo;   // the version waiting in the repos, if any
 
-    QString id() const { return cve + "@" + package; }
+    // What the finding is in. "system": a pacman package (`package`,
+    // `version`). The other layers name what you act on in `package` and the
+    // vulnerable part in `component` at `version`:
+    //   "project"   a project's dependency: package = the project's folder
+    //               name, location = its path, ecosystem = npm, NuGet...
+    //   "docker"    a library in a Docker image: package = the image,
+    //               location = its id
+    //   "firmware"  a device's firmware: package = the device, location =
+    //               fwupd's device id, component empty
+    QString layer = QStringLiteral("system");
+    QString component, location, ecosystem, advisory; // advisory: OSV's or trivy's id when not a CVE
+
+    // What a finding is listed and triaged under: the package for the system
+    // layer; for the others the layer and the location (two projects can
+    // share a folder name, as a clone and a copy of it do).
+    QString groupKey() const {
+        return layer == "system" ? package : layer + ":" + (location.isEmpty() ? package : location);
+    }
+    QString id() const {
+        if (layer == "system")
+            return cve + "@" + package;
+        return cve + "@" + groupKey() + (component.isEmpty() ? QString() : "/" + component + "@" + version);
+    }
     QJsonObject toJson() const;
     static Finding fromJson(const QJsonObject &o);
 };

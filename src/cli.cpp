@@ -2,6 +2,10 @@
 
 #include "cve5.h"
 #include "cvelist.h"
+#include "docker.h"
+#include "firmware.h"
+#include "osv.h"
+#include "projects.h"
 #include "feeds.h"
 #include "inventory.h"
 #include "matcher.h"
@@ -17,7 +21,9 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QMap>
 #include <QSet>
+#include <QStandardPaths>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
@@ -44,7 +50,8 @@ void usage(QTextStream &out) {
            "  ward status [--json] [--list] [--all]\n"
            "                       the last check's results, without checking\n"
            "  ward show <CVE-ID>   one CVE: what it says, and why it matched here\n"
-           "  ward fix <package>   what would fix a package; Ward prints it, it never runs it\n"
+           "  ward fix <name>      what would fix a package, project, image or device;\n"
+           "                       Ward prints it, it never runs it\n"
            "  ward schedule on|off|status\n"
            "                       the daily check (a systemd user timer)\n"
            "  ward skill install   install the agent skill into ~/.claude/skills/ward\n\n"
@@ -75,8 +82,8 @@ void printFindings(QTextStream &out, const QJsonObject &state, bool all, bool li
     const QList<Report::PackageSummary> packages = Report::byPackage(findings);
     out << "Checked " << state.value("checkedAt").toString() << ": " << state.value("packages").toInt()
         << " packages against " << state.value("records").toInt() << " CVE records.\n";
-    out << affected << " CVEs match " << packages.size() << " packages; " << kev
-        << " are known to be exploited.\n";
+    out << affected << " CVEs match " << t.packages << " installed packages, " << t.projects << " projects, "
+        << t.images << " Docker images and " << t.devices << " devices; known to be exploited: " << kev << ".\n";
     out << "Triage: " << now << " matter now, " << soon << " soon, " << affected - now - soon - open
         << " later or not at all; " << open << " not looked at yet (" << byClaude << " judged by Claude, "
         << byWard << " settled by Ward from the evidence).\n";
@@ -90,6 +97,27 @@ void printFindings(QTextStream &out, const QJsonObject &state, bool all, bool li
         out << "  Triage failed: " << e.toString() << "\n";
     out << unknown << " more matched by name with no versions Ward can read"
         << (all ? ".\n" : " (--all lists them).\n");
+    const QJsonObject layers = state.value("layers").toObject();
+    if (!layers.isEmpty()) {
+        const QJsonObject p = layers.value("projects").toObject(), fw = layers.value("firmware").toObject(),
+                          dk = layers.value("docker").toObject();
+        out << "Projects: " << p.value("files").toInt() << " lockfiles and restored projects, "
+            << p.value("packages").toInt() << " distinct packages, " << p.value("vulnerable").toInt()
+            << " with advisories" << (p.contains("error") ? " (" + p.value("error").toString() + ")" : QString())
+            << ".\n";
+        if (fw.value("available").toBool())
+            out << "Firmware: " << fw.value("devices").toInt() << " devices, " << fw.value("updates").toInt()
+                << " with a pending update (LVFS metadata from " << fw.value("metadataDate").toString().left(10)
+                << ").\n";
+        else
+            out << "Firmware: not checked: " << fw.value("error").toString() << ".\n";
+        if (dk.value("available").toBool())
+            out << "Docker: " << dk.value("images").toInt() << " images (" << dk.value("scanned").toInt()
+                << " scanned now, " << dk.value("cached").toInt() << " from today's scans)"
+                << (dk.contains("error") ? "; " + dk.value("error").toString() : QString()) << ".\n";
+        else
+            out << "Docker: not checked: " << dk.value("error").toString() << ".\n";
+    }
     for (const QJsonValue &v : state.value("kernels").toArray()) {
         const QJsonObject k = v.toObject();
         if (k.value("eol").toBool())
@@ -100,11 +128,14 @@ void printFindings(QTextStream &out, const QJsonObject &state, bool all, bool li
     }
     if (!packages.isEmpty()) {
         out << "\n"
-            << pad("PACKAGE", 22) << pad("INSTALLED", 24) << pad("CVES", 6) << pad("NOW", 5) << pad("SOON", 5)
-            << pad("OPEN", 5) << pad("EXPL", 5) << pad("IN REPOS", 16) << "FIXED UPSTREAM IN\n";
+            << pad("PACKAGE", 22) << pad("KIND", 9) << pad("INSTALLED", 24) << pad("CVES", 6) << pad("NOW", 5)
+            << pad("SOON", 5) << pad("OPEN", 5) << pad("EXPL", 5) << pad("IN REPOS", 16) << "FIXED UPSTREAM IN\n";
         auto n = [](int v) { return v ? QString::number(v) : QString("-"); };
         for (const Report::PackageSummary &s : packages)
-            out << pad(s.package, 22) << pad(s.version, 24) << pad(QString::number(s.count), 6) << pad(n(s.now), 5)
+            out << pad(s.package, 22) << pad(s.layer == "system" ? QString("package") : s.layer, 9)
+                << pad(s.layer == "project" ? s.location.section('/', -2) // the folder and its parent
+                       : s.layer == "docker" ? s.location.mid(7, 12) : s.version, 24)
+                << pad(QString::number(s.count), 6) << pad(n(s.now), 5)
                 << pad(n(s.soon), 5) << pad(n(s.open), 5) << pad(n(s.kev), 5)
                 << pad(s.updateTo.isEmpty() ? "-" : s.updateTo, 16) << (s.fixAll.isEmpty() ? "-" : s.fixAll)
                 << "\n";
@@ -120,7 +151,9 @@ void printFindings(QTextStream &out, const QJsonObject &state, bool all, bool li
         const Matcher::Finding f = Matcher::Finding::fromJson(v.toObject());
         if (f.verdict != "affected" && !all)
             continue;
-        out << pad(f.cve, 17) << pad(f.package, 22) << pad(f.priority.isEmpty() ? "-" : f.priority, 9)
+        out << pad(f.cve, 17)
+            << pad(f.component.isEmpty() ? f.package : f.package + "/" + f.component + " " + f.version, 22)
+            << pad(f.priority.isEmpty() ? "-" : f.priority, 9)
             << pad(f.applies.isEmpty() ? "-" : f.applies, 8)
             << pad(f.score >= 0 ? QString::number(f.score, 'f', 1) : "-", 6) << (f.kev ? "EXPLOITED " : "")
             << (f.verdict == "unknown" ? "(versions unreadable) " : "")
@@ -185,24 +218,48 @@ void notify(const QJsonObject &state, QTextStream &log) {
     }
 }
 
-int fix(const QString &package, QTextStream &out, QTextStream &err) {
+int fix(const QString &name, QTextStream &out, QTextStream &err) {
     const QJsonObject state = QJsonDocument::fromJson(Feeds::read(statePath())).object();
-    for (const Report::PackageSummary &s : Report::byPackage(state.value("findings").toArray())) {
-        if (s.package != package)
+    const QJsonArray findings = state.value("findings").toArray();
+    for (const Report::PackageSummary &s : Report::byPackage(findings)) {
+        if (s.package != name && s.group != name && s.location != name)
             continue;
-        out << s.package << " " << s.version << ": " << s.count << " CVEs.\n";
-        if (!s.updateTo.isEmpty())
-            out << "A fixing update is waiting in the repos (" << s.updateTo << "). Install it with:\n  omarchy-update\n";
-        else
-            out << "No fixed package is in the repos yet"
-                << (s.fixAll.isEmpty() ? QString(".") : " (fixed upstream in " + s.fixAll + ").") << "\n";
+        out << s.package << (s.version.isEmpty() ? QString() : " " + s.version) << ": " << s.count << " CVEs.\n";
+        if (s.layer == "system" || s.layer == "firmware") {
+            const QString command = s.layer == "firmware" ? "fwupdmgr update" : "omarchy-update";
+            if (!s.updateTo.isEmpty())
+                out << "A fixing update is waiting (" << s.updateTo << "). Install it with:\n  " << command << "\n";
+            else
+                out << "No fixed package is in the repos yet"
+                    << (s.fixAll.isEmpty() ? QString(".") : " (fixed upstream in " + s.fixAll + ").") << "\n";
+        } else {
+            // Projects and images: each vulnerable component and the version
+            // that fixes it, once each.
+            QMap<QString, QString> fixes;
+            for (const QJsonValue &v : findings) {
+                const Matcher::Finding f = Matcher::Finding::fromJson(v.toObject());
+                if (f.groupKey() != s.group || f.verdict != "affected")
+                    continue;
+                const QString k = f.component + " " + f.version;
+                const QString was = fixes.value(k);
+                if (!f.fixedIn.isEmpty() && (was.isEmpty() || Cve5::compareUpstream(f.fixedIn, was) > 0))
+                    fixes.insert(k, f.fixedIn);
+                else if (!fixes.contains(k))
+                    fixes.insert(k, QString());
+            }
+            out << (s.layer == "project" ? "In " + s.location + ", update:\n"
+                                         : "In the image " + s.package + " (rebuild it, or pull a newer one):\n");
+            for (auto it = fixes.constBegin(); it != fixes.constEnd(); ++it)
+                out << "  " << it.key() << " -> " << (it.value().isEmpty() ? QString("no fixed version named") : it.value())
+                    << "\n";
+        }
         const QString m = Report::mitigation(QJsonDocument::fromJson(Feeds::read(Paths::state() + "/triage.json")).object(),
-                                             s.package, s.version);
+                                             s.group, s.version);
         if (!m.isEmpty())
             out << "Claude's suggested mitigation until then (check it before running it):\n  " << m << "\n";
         return 0;
     }
-    err << package << " has no findings in the last check.\n";
+    err << name << " has no findings in the last check.\n";
     return 1;
 }
 
@@ -270,13 +327,71 @@ int check(const QStringList &args, QTextStream &out, QTextStream &err) {
         Matcher::loadNames(Feeds::read(":/names.json"), Feeds::read(Paths::config() + "/names.json"));
     QElapsedTimer timer;
     timer.start();
+    const QHash<QString, Feeds::Kev> kev = Feeds::parseKev(Feeds::read(Paths::cache() + "/kev.json"));
     QList<Matcher::Finding> findings =
-        Matcher::run(packages, Feeds::parseArch(Feeds::read(Paths::cache() + "/arch-all.json")),
-                     Feeds::parseKev(Feeds::read(Paths::cache() + "/kev.json")), store, names);
+        Matcher::run(packages, Feeds::parseArch(Feeds::read(Paths::cache() + "/arch-all.json")), kev, store, names);
     const qint64 matchMs = timer.elapsed();
 
     // What this machine uses, and what the repos already have.
-    const QJsonObject exposure = Review::addExposure(findings, packages);
+    QJsonObject exposure = Review::addExposure(findings, packages);
+
+    // The other layers: project dependencies (OSV), firmware (fwupd) and
+    // Docker images (trivy). Each says what it covered or why it didn't.
+    QJsonObject layers;
+    {
+        const QStringList roots = Projects::roots(Paths::config() + "/ward.json");
+        const Projects::Scan scan = Projects::scan(roots);
+        QJsonObject p{{"roots", QJsonArray::fromStringList(roots)},
+                      {"files", int(scan.files.size())},
+                      {"dependencies", int(scan.dependencies.size())}};
+        if (offline) {
+            p.insert("error", "not looked up: --offline");
+        } else if (!scan.dependencies.isEmpty()) {
+            log << "Looking up " << scan.dependencies.size() << " project dependencies in OSV...\n";
+            log.flush();
+            const Osv::Run osv = Osv::check(scan.dependencies, Paths::cache(), store, kev);
+            p.insert("packages", osv.packages);
+            p.insert("vulnerable", osv.vulnerable);
+            p.insert("advisories", osv.advisories);
+            if (!osv.error.isEmpty())
+                p.insert("error", osv.error);
+            findings += osv.findings;
+            QSet<QString> seen;
+            for (const Matcher::Finding &f : osv.findings)
+                if (!seen.contains(f.groupKey())) {
+                    seen.insert(f.groupKey());
+                    exposure.insert(f.groupKey(), QJsonObject{{"summary", "dependencies as its lockfile or restore output names them; they run only when the project is built, tested or run here"}});
+                }
+        }
+        layers.insert("projects", p);
+    }
+    {
+        const Firmware::Run fw = Firmware::check(store, kev);
+        QJsonObject p{{"available", fw.available}, {"devices", fw.devices}, {"updates", fw.updates},
+                      {"metadataDate", fw.metadataDate}};
+        if (!fw.error.isEmpty())
+            p.insert("error", fw.error);
+        findings += fw.findings;
+        for (const Matcher::Finding &f : fw.findings)
+            exposure.insert(f.groupKey(), QJsonObject{{"summary", "the device's firmware, version " + f.version}});
+        layers.insert("firmware", p);
+    }
+    {
+        // A first scan of every image can take minutes, so say so.
+        if (!offline && !QStandardPaths::findExecutable("trivy").isEmpty()) {
+            log << "Scanning Docker images with trivy...\n";
+            log.flush();
+        }
+        const Docker::Run dk = Docker::check(Paths::cache(), store, kev, offline);
+        QJsonObject p{{"available", dk.available}, {"images", dk.images}, {"scanned", dk.scanned},
+                      {"cached", dk.cached}};
+        if (!dk.error.isEmpty())
+            p.insert("error", dk.error);
+        findings += dk.findings;
+        for (auto it = dk.exposure.begin(); it != dk.exposure.end(); ++it)
+            exposure.insert(it.key(), it.value());
+        layers.insert("docker", p);
+    }
     QHash<QString, QString> pending;
     if (!offline) {
         QString e;
@@ -324,6 +439,7 @@ int check(const QStringList &args, QTextStream &out, QTextStream &err) {
                             {"matchMilliseconds", matchMs},
                             {"kernels", kernels(packages)},
                             {"exposure", exposure},
+                            {"layers", layers},
                             {"triage", triageState},
                             {"findings", list}};
     QSaveFile file(statePath());

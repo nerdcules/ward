@@ -5,7 +5,6 @@
   "About this app": "Om denne app",
   "A check runs ward check, as the daily timer does. Triage asks Claude Code, on your account, at most 10 times a check, about up to 25 CVEs of one package each time; answers are kept, so each CVE is asked about once.": "Et tjek kører ward check, ligesom det daglige tjek gør. Vurderingen spørger Claude Code, på din konto, højst 10 gange pr. tjek om op til 25 CVE'er fra én pakke ad gangen; svarene gemmes, så hver CVE kun spørges om én gang.",
   "A fixing update is waiting in the repos (%1). Press U to install it.": "En opdatering, der retter det, ligger klar (%1). Tryk U for at installere den.",
-  "All packages with matches (F for those that need a look)": "Alle pakker med fund (F for dem, der skal ses på)",
   "and %n more": {
     "one": "og %n mere",
     "other": "og %n mere"
@@ -67,7 +66,6 @@
   "On this machine: %1": "På denne maskine: %1",
   "Open": "Åbn",
   "Open the selected CVE on cve.org": "Åbn den valgte CVE på cve.org",
-  "Packages that need a look (F shows all)": "Pakker, der skal ses på (F viser alle)",
   "Press Esc or click outside to close": "Tryk Esc eller klik udenfor for at lukke",
   "Quit": "Afslut",
   "Run": "Kør",
@@ -90,6 +88,30 @@
   "Turn the daily check on or off": "Slå det daglige tjek til eller fra",
   "Version %1": "Version %1",
   "ward.timer is not installed. Run bin/install, then try again.": "ward.timer er ikke installeret. Kør bin/install, og prøv igen.",
-  "%1 CVEs match %2 of %3 installed packages · now: %4 · soon: %5 · not triaged yet: %6 · known to be exploited: %7": "%1 CVE'er rammer %2 af %3 installerede pakker · nu: %4 · snart: %5 · endnu ikke vurderet: %6 · kendt udnyttet: %7",
-  "No check yet. Press Space to check. The first one downloads CVE.org's full list once (669 MB) and keeps a 442 MB copy.": "Intet tjek endnu. Tryk mellemrum for at tjekke. Det første henter CVE.org's fulde liste én gang (669 MB) og gemmer en kopi på 442 MB."
+  "No check yet. Press Space to check. The first one downloads CVE.org's full list once (669 MB) and keeps a 442 MB copy.": "Intet tjek endnu. Tryk mellemrum for at tjekke. Det første henter CVE.org's fulde liste én gang (669 MB) og gemmer en kopi på 442 MB.",
+  "%1 %2 → %3": "%1 %2 → %3",
+  "%1 %2, no fixed version named": "%1 %2, ingen rettet version nævnt",
+  "project in %1": "projekt i %1",
+  "Docker image": "Docker-image",
+  "firmware %1": "firmware %1",
+  "Fix it in the project: update each dependency below to the version its CVE names.": "Ret det i projektet: opdater hver afhængighed nedenfor til den version, dens CVE nævner.",
+  "Fix it in the image: rebuild it, or pull a newer one, so its packages reach the fixed versions below.": "Ret det i imaget: byg det igen, eller hent et nyere, så dets pakker når de rettede versioner nedenfor.",
+  "A fixing firmware release is available (%1). Press U to install it with fwupdmgr.": "En firmwareudgivelse, der retter det, er tilgængelig (%1). Tryk U for at installere den med fwupdmgr.",
+  "project · %1": "projekt · %1",
+  "%1 of %2 installed packages": "%1 af %2 installerede pakker",
+  "%n projects": {
+    "one": "%n projekt",
+    "other": "%n projekter"
+  },
+  "%n Docker images": {
+    "one": "%n Docker-image",
+    "other": "%n Docker-images"
+  },
+  "%n devices": {
+    "one": "%n enhed",
+    "other": "%n enheder"
+  },
+  "%1 CVEs in %2 · now: %3 · soon: %4 · not triaged yet: %5 · known to be exploited: %6": "%1 CVE'er i %2 · nu: %3 · snart: %4 · endnu ikke vurderet: %5 · kendt udnyttet: %6",
+  "What needs a look (F shows everything with a match)": "Det, der skal ses på (F viser alt med fund)",
+  "Everything with a match (F for what needs a look)": "Alt med fund (F for det, der skal ses på)"
 }

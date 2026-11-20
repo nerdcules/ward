@@ -15,6 +15,10 @@ HEADERS += \
     src/cli.h \
     src/cve5.h \
     src/cvelist.h \
+    src/docker.h \
+    src/firmware.h \
+    src/osv.h \
+    src/projects.h \
     src/exposure.h \
     src/feeds.h \
     src/inventory.h \
@@ -38,6 +42,10 @@ SOURCES += \
     src/cli.cpp \
     src/cve5.cpp \
     src/cvelist.cpp \
+    src/docker.cpp \
+    src/firmware.cpp \
+    src/osv.cpp \
+    src/projects.cpp \
     src/exposure.cpp \
     src/feeds.cpp \
     src/inventory.cpp \

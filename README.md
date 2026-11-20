@@ -9,9 +9,11 @@
 Ward says which published CVEs affect this machine, and which of them matter
 here. It matches every installed pacman package, and the kernel, against
 CVE.org's records, Arch's security tracker and CISA's list of exploited
-vulnerabilities. It works out what the machine actually uses, and has Claude
-judge what it can't settle itself. A daily check sends a desktop alert when
-something needs you.
+vulnerabilities; the dependencies of your projects against OSV; the
+firmware fwupd knows about against its vendors' releases; and, with trivy,
+your Docker images. It works out what the machine actually uses, and has
+Claude judge what it can't settle itself. A daily check sends a desktop
+alert when something needs you.
 
 Ward never installs or changes anything on its own. When a fixed package is
 waiting in the repos, or Claude suggests a mitigation, the window shows the
@@ -27,6 +29,8 @@ ward schedule on     # the daily check (or press T in the window)
 It needs Qt 6 (base, declarative, svg, wayland), libarchive, pacman-contrib
 (`checkupdates`) and iproute2 (`ss`). Triage needs Claude Code (`claude` on the
 PATH); without it, Ward still matches and reports, and says triage failed.
+Docker images need trivy (`sudo pacman -S trivy`), firmware needs fwupd;
+without them Ward says that part wasn't checked.
 
 ### Updating
 
@@ -73,14 +77,17 @@ ward check [--json] [--offline] [--no-triage] [--notify] [--list] [--all]
 ward update                     only bring the CVE list up to date
 ward status [--json] [--list] [--all]
 ward show <CVE-ID>              one record, every product and range it names
-ward fix <package>              what would fix it (printed, never run)
+ward fix <name>                 what would fix a package, project, image or
+                                device (printed, never run)
 ward schedule on|off|status     the daily check, a systemd user timer
 ward skill install              the agent skill, into ~/.claude/skills/ward
 ```
 
-`ward check` prints one line per package: how many CVEs match, how many
-triage rated "now" or "soon", how many aren't triaged yet, and the fixed
-version upstream or waiting in the repos.
+`ward check` prints one line per package, project, Docker image or device:
+how many CVEs match, how many triage rated "now" or "soon", how many aren't
+triaged yet, and the fixed version upstream or waiting in the repos.
+`--offline` skips the OSV lookup (projects aren't listed then) and runs
+trivy from its own last database.
 
 ## Where the CVEs come from
 
@@ -103,6 +110,39 @@ version upstream or waiting in the repos.
 NVD isn't used. In the 120 days to 20 Nov 2026 it published 60,077 CVEs, and
 41,602 of those had no product data (CPE) to match against. All 100 CVE.org
 records sampled from that gap named products and versions.
+
+## Projects, firmware and Docker
+
+- **Projects.** Ward reads what each project's build tools resolved, under
+  `~/Work` and `~/Projects` (or the `projectRoots` list in
+  `~/.config/ward/ward.json`), up to six folders deep. It skips
+  `node_modules`, `.git`, `bin`, `build`, `out`, `dist`, `target`, `vendor`,
+  `.gradle`, caches, virtualenvs and git worktrees, and in an `obj` folder
+  reads only `project.assets.json`. It reads npm's `package-lock.json`, the
+  `obj/project.assets.json` that `dotnet restore` writes (every NuGet
+  package, transitive ones too), `Cargo.lock`, and pinned lines of
+  `requirements*.txt`. A project without one of those, such as a `.csproj`
+  never restored or a Gradle build without a lock, isn't seen. Each version
+  goes to OSV's batch query once; each advisory is fetched once and kept in
+  `~/.cache/ward/osv`, and fetched again when OSV says it changed. A
+  finding takes its advisory's CVE alias when it has one, so the score and
+  CISA's list apply. Each project is a line of its own, by its path, so a
+  clone and a copy with the same folder name stay apart.
+- **Firmware.** What `fwupdmgr get-updates --json` already knows: the CVEs a
+  device's pending release lists as fixed. Ward doesn't refresh LVFS's
+  metadata; it says how old it is. U installs the release with
+  `fwupdmgr update`.
+- **Docker.** Every local image is scanned with `trivy image` once per image
+  id and day (kept in `~/.cache/ward/trivy`). An image no running container
+  uses is settled by Ward as "later". Ward offers no command for an image or
+  a project; `ward fix` lists each vulnerable component and the version that
+  fixes it.
+
+Measured here on 20 Nov 2026: 77 lockfiles and restored projects gave 4,677
+dependencies, 1,411 distinct; 43 had advisories, which made 233 findings in
+17 projects. The first lookup, fetching 123 advisories, made the whole check
+take 42.6 s. fwupd knew 23 devices with no pending update (LVFS metadata
+from 4 Nov). Docker wasn't measured: trivy isn't installed here.
 
 ## How a package is matched
 
@@ -171,16 +211,22 @@ and a kernel branch kernel.org no longer maintains, each once (remembered in
 | --- | --- |
 | `~/.cache/ward/cve.sqlite` | the CVE list; delete it to download again |
 | `~/.cache/ward/*.json` | the tracker, KEV and kernel.org feeds, last copy |
+| `~/.cache/ward/osv/` | OSV advisories for project dependencies |
+| `~/.cache/ward/trivy/` | trivy's scan of each Docker image, by image id |
+| `~/.config/ward/ward.json` | `projectRoots`: the folders whose projects are read |
 | `~/.local/state/ward/findings.json` | the last check's results |
 | `~/.local/state/ward/triage.json` | Claude's answers |
 | `~/.config/ward/names.json` | your own name and vendor rules |
 
 ## Tests
 
-`bin/test` builds and runs the Qt Test suite offscreen: on 20 Nov 2026, 29
-passed, 0 failed, 0 skipped. Records and tracker groups in `tests/fixtures`
-are real ones fetched that day; `claude-stub.sh` stands in for Claude Code.
-Version order is checked against pacman's own `vercmp` on 27 pairs.
+`bin/test` builds and runs the Qt Test suite offscreen: on 20 Nov 2026, 36
+passed, 0 failed, 0 skipped. CVE records, tracker groups and the OSV
+advisory in `tests/fixtures` are real ones fetched that day; the lockfiles,
+fwupd and trivy answers in the tests are made up in those tools' formats
+(trivy's has not been checked against a real scan); `claude-stub.sh` stands
+in for Claude Code. Version order is checked against pacman's own `vercmp`
+on 27 pairs.
 
 ## Licence
 

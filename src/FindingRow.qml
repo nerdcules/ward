@@ -69,7 +69,11 @@ Rectangle {
             visible: text !== ""
             text: {
                 var parts = []
-                if (row.finding.fixedIn !== "") parts.push(qsTr("fixed upstream in %1").arg(row.finding.fixedIn))
+                if (row.finding.component !== "") parts.push(row.finding.fixedIn !== ""
+                    ? qsTr("%1 %2 → %3").arg(row.finding.component).arg(row.finding.version).arg(row.finding.fixedIn)
+                    : qsTr("%1 %2, no fixed version named").arg(row.finding.component).arg(row.finding.version))
+                else if (row.finding.fixedIn !== "") parts.push(qsTr("fixed upstream in %1").arg(row.finding.fixedIn))
+                if (row.finding.advisory !== "" && row.finding.advisory !== row.finding.cve) parts.push(row.finding.advisory)
                 if (row.finding.where !== "") parts.push(qsTr("kernel code: %1").arg(row.finding.where))
                 if (row.triaged) parts.push(row.finding.triagedBy === "claude" ? qsTr("judged by Claude") : qsTr("settled by Ward"))
                 if (row.finding.match === "name") parts.push(qsTr("matched by name only"))

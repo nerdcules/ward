@@ -22,5 +22,17 @@
   "and %n more": {
     "one": "and %n more",
     "other": "and %n more"
+  },
+  "%n projects": {
+    "one": "%n project",
+    "other": "%n projects"
+  },
+  "%n Docker images": {
+    "one": "%n Docker image",
+    "other": "%n Docker images"
+  },
+  "%n devices": {
+    "one": "%n device",
+    "other": "%n devices"
   }
 }

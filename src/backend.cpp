@@ -8,6 +8,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDesktopServices>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -104,7 +105,8 @@ QVariantList Backend::packages() const {
     for (const Report::PackageSummary &s : Report::byPackage(m_state.value("findings").toArray())) {
         if (m_attentionOnly && s.rank() == 3)
             continue;
-        out.append(QVariantMap{{"package", s.package}, {"version", s.version}, {"count", s.count},
+        out.append(QVariantMap{{"group", s.group}, {"layer", s.layer}, {"location", QString(s.location).replace(QDir::homePath(), "~")},
+                               {"package", s.package}, {"version", s.version}, {"count", s.count},
                                {"now", s.now},         {"soon", s.soon},       {"open", s.open},
                                {"kev", s.kev},         {"updateTo", s.updateTo}, {"fixAll", s.fixAll},
                                {"kernel", s.kernel},   {"rank", s.rank()}});
@@ -128,7 +130,10 @@ QVariantMap Backend::summary() const {
             {"records", m_state.value("records").toInt()},
             {"installed", m_state.value("packages").toInt()},
             {"affected", t.affected},
-            {"packages", int(Report::byPackage(findings).size())},
+            {"packages", t.packages},
+            {"projects", t.projects},
+            {"images", t.images},
+            {"devices", t.devices},
             {"now", t.now},
             {"soon", t.soon},
             {"open", t.open},
@@ -140,11 +145,11 @@ QVariantMap Backend::summary() const {
             {"triageCost", run.value("costUsd").toDouble()}};
 }
 
-QVariantList Backend::findings(const QString &package) const {
+QVariantList Backend::findings(const QString &group) const {
     QList<Matcher::Finding> list;
     for (const QJsonValue &v : m_state.value("findings").toArray()) {
         const Matcher::Finding f = Matcher::Finding::fromJson(v.toObject());
-        if (f.package == package && f.verdict == "affected")
+        if (f.groupKey() == group && f.verdict == "affected")
             list.append(f);
     }
     std::stable_sort(list.begin(), list.end(), [](const Matcher::Finding &a, const Matcher::Finding &b) {
@@ -166,20 +171,26 @@ QVariantList Backend::findings(const QString &package) const {
                                {"triagedBy", f.triagedBy},
                                {"title", f.title.isEmpty() ? f.description.left(240) : f.title},
                                {"fixedIn", f.fixedIn},
+                               {"component", f.component},
+                               {"version", f.version},
+                               {"ecosystem", f.ecosystem},
+                               {"advisory", f.advisory},
                                {"where", f.where},
                                {"match", f.match}});
     return out;
 }
 
-QVariantMap Backend::detail(const QString &package) const {
+QVariantMap Backend::detail(const QString &group) const {
     QVariantMap out;
     for (const Report::PackageSummary &s : Report::byPackage(m_state.value("findings").toArray())) {
-        if (s.package != package)
+        if (s.group != group)
             continue;
-        out = {{"package", s.package}, {"version", s.version},   {"updateTo", s.updateTo},
-               {"fixAll", s.fixAll},   {"kernel", s.kernel},     {"count", s.count},
-               {"mitigation", Report::mitigation(m_triageCache, s.package, s.version)},
-               {"exposure", m_state.value("exposure").toObject().value(package).toObject().value("summary").toString()}};
+        out = {{"group", s.group},     {"layer", s.layer},   {"package", s.package},
+               {"location", QString(s.location).replace(QDir::homePath(), "~")},
+               {"version", s.version}, {"updateTo", s.updateTo}, {"fixAll", s.fixAll},
+               {"kernel", s.kernel},   {"count", s.count},
+               {"mitigation", Report::mitigation(m_triageCache, s.group, s.version)},
+               {"exposure", m_state.value("exposure").toObject().value(group).toObject().value("summary").toString()}};
     }
     return out;
 }
@@ -194,14 +205,19 @@ void Backend::check() {
     m_check.start(m_program, {"check"});
 }
 
-QString Backend::updateCommand(const QString &package) const {
-    if (detail(package).value("updateTo").toString().isEmpty())
+QString Backend::updateCommand(const QString &group) const {
+    const QVariantMap d = detail(group);
+    if (d.value("updateTo").toString().isEmpty())
+        return {};
+    if (d.value("layer").toString() == "firmware")
+        return "fwupdmgr update";
+    if (d.value("layer").toString() != "system")
         return {};
     return QStandardPaths::findExecutable("omarchy-update").isEmpty() ? "sudo pacman -Syu" : "omarchy-update";
 }
 
-QString Backend::mitigationCommand(const QString &package) const {
-    return detail(package).value("mitigation").toString();
+QString Backend::mitigationCommand(const QString &group) const {
+    return detail(group).value("mitigation").toString();
 }
 
 bool Backend::runInTerminal(const QString &command) {
@@ -229,8 +245,10 @@ bool Backend::runInTerminal(const QString &command) {
     return true;
 }
 
-void Backend::openCve(const QString &cve) {
-    QDesktopServices::openUrl(QUrl("https://www.cve.org/CVERecord?id=" + cve));
+void Backend::openCve(const QString &id) {
+    // CVEs on cve.org; an advisory without one (GHSA-…, RUSTSEC-…) on osv.dev.
+    QDesktopServices::openUrl(QUrl(id.startsWith("CVE-") ? "https://www.cve.org/CVERecord?id=" + id
+                                                         : "https://osv.dev/vulnerability/" + id));
 }
 
 void Backend::refreshSchedule() {

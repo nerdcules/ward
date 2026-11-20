@@ -40,14 +40,17 @@ public:
     QString error() const { return m_error; }
     QString notice() const { return m_notice; }
 
-    // One package's CVEs, most pressing first, and what Ward knows about it.
-    Q_INVOKABLE QVariantList findings(const QString &package) const;
-    Q_INVOKABLE QVariantMap detail(const QString &package) const;
+    // One group's CVEs (a package, project, image or device; see
+    // Finding::groupKey), most pressing first, and what Ward knows about it.
+    Q_INVOKABLE QVariantList findings(const QString &group) const;
+    Q_INVOKABLE QVariantMap detail(const QString &group) const;
 
     Q_INVOKABLE void check();
-    // The command a package's fix or mitigation would run, or "" when none.
-    Q_INVOKABLE QString updateCommand(const QString &package) const;
-    Q_INVOKABLE QString mitigationCommand(const QString &package) const;
+    // The command a group's fix or mitigation would run, or "" when none:
+    // omarchy-update for a package, fwupdmgr update for firmware; projects
+    // and images are fixed in their own sources, so they have none.
+    Q_INVOKABLE QString updateCommand(const QString &group) const;
+    Q_INVOKABLE QString mitigationCommand(const QString &group) const;
     Q_INVOKABLE bool runInTerminal(const QString &command);
     Q_INVOKABLE void openCve(const QString &cve);
     Q_INVOKABLE bool setScheduled(bool on);

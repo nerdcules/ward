@@ -96,6 +96,12 @@ QJsonObject Finding::toJson() const {
     put("why", why);
     put("triagedBy", triagedBy);
     put("updateTo", updateTo);
+    if (layer != "system")
+        o.insert("layer", layer);
+    put("component", component);
+    put("location", location);
+    put("ecosystem", ecosystem);
+    put("advisory", advisory);
     if (!files.isEmpty())
         o.insert("files", QJsonArray::fromStringList(files));
     if (score >= 0)
@@ -132,6 +138,11 @@ Finding Finding::fromJson(const QJsonObject &o) {
     f.why = o.value("why").toString();
     f.triagedBy = o.value("triagedBy").toString();
     f.updateTo = o.value("updateTo").toString();
+    f.layer = o.value("layer").toString("system");
+    f.component = o.value("component").toString();
+    f.location = o.value("location").toString();
+    f.ecosystem = o.value("ecosystem").toString();
+    f.advisory = o.value("advisory").toString();
     for (const QJsonValue &v : o.value("files").toArray())
         f.files << v.toString();
     return f;

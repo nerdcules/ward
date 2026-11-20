@@ -25,8 +25,8 @@ ApplicationWindow {
     readonly property var current: packages.currentIndex >= 0 && packages.currentIndex < backend.packages.length
                                    ? backend.packages[packages.currentIndex] : null
     // Re-read whenever the results or the selection change.
-    readonly property var detail: { backend.packages; return current ? backend.detail(current.package) : ({}) }
-    readonly property var cves: { backend.packages; return current ? backend.findings(current.package) : [] }
+    readonly property var detail: { backend.packages; return current ? backend.detail(current.group) : ({}) }
+    readonly property var cves: { backend.packages; return current ? backend.findings(current.group) : [] }
     readonly property var currentCve: cveList.currentIndex >= 0 && cveList.currentIndex < cves.length ? cves[cveList.currentIndex] : null
 
     function move(list, count, delta) {
@@ -48,8 +48,8 @@ ApplicationWindow {
     Shortcut { sequence: "N"; context: Qt.ApplicationShortcut; enabled: !win.overlayOpen; onActivated: win.move(cveList, win.cves.length, 1) }
     Shortcut { sequence: "P"; context: Qt.ApplicationShortcut; enabled: !win.overlayOpen; onActivated: win.move(cveList, win.cves.length, -1) }
     Shortcut { sequence: "O"; context: Qt.ApplicationShortcut; enabled: !win.overlayOpen && win.currentCve !== null; onActivated: backend.openCve(win.currentCve.cve) }
-    Shortcut { sequence: "U"; context: Qt.ApplicationShortcut; enabled: !win.overlayOpen && win.current !== null; onActivated: win.ask(backend.updateCommand(win.current.package)) }
-    Shortcut { sequence: "M"; context: Qt.ApplicationShortcut; enabled: !win.overlayOpen && win.current !== null; onActivated: win.ask(backend.mitigationCommand(win.current.package)) }
+    Shortcut { sequence: "U"; context: Qt.ApplicationShortcut; enabled: !win.overlayOpen && win.current !== null; onActivated: win.ask(backend.updateCommand(win.current.group)) }
+    Shortcut { sequence: "M"; context: Qt.ApplicationShortcut; enabled: !win.overlayOpen && win.current !== null; onActivated: win.ask(backend.mitigationCommand(win.current.group)) }
     Shortcut { sequence: "F"; context: Qt.ApplicationShortcut; enabled: !win.overlayOpen; onActivated: { backend.attentionOnly = !backend.attentionOnly; packages.currentIndex = 0 } }
     Shortcut { sequence: "T"; context: Qt.ApplicationShortcut; enabled: !win.overlayOpen; onActivated: backend.setScheduled(!backend.scheduled) }
 
@@ -124,10 +124,14 @@ ApplicationWindow {
                 text: {
                     translator.language
                     var s = win.summary
-                    return qsTr("%1 CVEs match %2 of %3 installed packages · now: %4 · soon: %5 · not triaged yet: %6 · known to be exploited: %7")
+                    var where = [qsTr("%1 of %2 installed packages").arg(Number(s.packages).toLocaleString(Qt.locale(), 'f', 0))
+                                     .arg(Number(s.installed).toLocaleString(Qt.locale(), 'f', 0))]
+                    if (s.projects > 0) where.push(qsTr("%n projects", "", s.projects))
+                    if (s.images > 0) where.push(qsTr("%n Docker images", "", s.images))
+                    if (s.devices > 0) where.push(qsTr("%n devices", "", s.devices))
+                    return qsTr("%1 CVEs in %2 · now: %3 · soon: %4 · not triaged yet: %5 · known to be exploited: %6")
                         .arg(Number(s.affected).toLocaleString(Qt.locale(), 'f', 0))
-                        .arg(Number(s.packages).toLocaleString(Qt.locale(), 'f', 0))
-                        .arg(Number(s.installed).toLocaleString(Qt.locale(), 'f', 0))
+                        .arg(where.join(", "))
                         .arg(s.now).arg(s.soon)
                         .arg(Number(s.open).toLocaleString(Qt.locale(), 'f', 0))
                         .arg(s.kev)
@@ -159,7 +163,7 @@ ApplicationWindow {
                         Label {
                             Layout.leftMargin: 8
                             Layout.topMargin: 4
-                            text: backend.attentionOnly ? qsTr("Packages that need a look (F shows all)") : qsTr("All packages with matches (F for those that need a look)")
+                            text: backend.attentionOnly ? qsTr("What needs a look (F shows everything with a match)") : qsTr("Everything with a match (F for what needs a look)")
                             color: theme.muted
                             font.pixelSize: 12
                         }
@@ -213,7 +217,16 @@ ApplicationWindow {
                         RowLayout {
                             Layout.fillWidth: true
                             Label { text: win.detail.package || ""; color: theme.text; font.pixelSize: 18; font.weight: Font.DemiBold }
-                            Label { text: win.detail.version || ""; color: theme.muted; font.pixelSize: 14 }
+                            Label {
+                                text: win.detail.layer === "project" ? qsTr("project in %1").arg(win.detail.location)
+                                    : win.detail.layer === "docker" ? qsTr("Docker image")
+                                    : win.detail.layer === "firmware" ? qsTr("firmware %1").arg(win.detail.version)
+                                    : (win.detail.version || "")
+                                color: theme.muted
+                                font.pixelSize: 14
+                                elide: Text.ElideMiddle
+                                Layout.fillWidth: true
+                            }
                             Item { Layout.fillWidth: true }
                         }
                         Label {
@@ -228,7 +241,13 @@ ApplicationWindow {
                         }
                         Label {
                             Layout.fillWidth: true
-                            text: (win.detail.updateTo || "") !== ""
+                            text: win.detail.layer === "project"
+                                  ? qsTr("Fix it in the project: update each dependency below to the version its CVE names.")
+                                  : win.detail.layer === "docker"
+                                  ? qsTr("Fix it in the image: rebuild it, or pull a newer one, so its packages reach the fixed versions below.")
+                                  : (win.detail.updateTo || "") !== "" && win.detail.layer === "firmware"
+                                  ? qsTr("A fixing firmware release is available (%1). Press U to install it with fwupdmgr.").arg(win.detail.updateTo)
+                                  : (win.detail.updateTo || "") !== ""
                                   ? qsTr("A fixing update is waiting in the repos (%1). Press U to install it.").arg(win.detail.updateTo)
                                   : (win.detail.fixAll || "") !== ""
                                     ? qsTr("No fixed package in the repos yet. Fixed upstream in %1.").arg(win.detail.fixAll)

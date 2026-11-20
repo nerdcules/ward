@@ -12,6 +12,9 @@ namespace Net {
 // The body, or an empty array with `error` set. `status` gets the HTTP code.
 QByteArray get(const QUrl &url, QString *error, int *status = nullptr);
 
+// POSTs a JSON body; the reply's body, or empty with `error` set.
+QByteArray postJson(const QUrl &url, const QByteArray &json, QString *error, int *status = nullptr);
+
 // Streams the body to `path` through `path`.part, renamed only when complete.
 bool download(const QUrl &url, const QString &path, QString *error, int *status = nullptr);
 
