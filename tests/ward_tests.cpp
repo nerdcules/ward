@@ -406,6 +406,53 @@ private slots:
         QVERIFY(due.isEmpty());
     }
 
+    // 217 exploited CVEs in images nothing ran, settled as "later" by Ward,
+    // would each have alerted on 20 Nov 2026; untriaged ones still do.
+    void exploitedButLaterDoesNotAlert() {
+        Matcher::Finding later;
+        later.cve = "CVE-9";
+        later.package = "python:3.8-bookworm";
+        later.layer = "docker";
+        later.location = "sha256:abc";
+        later.component = "openssl";
+        later.version = "1";
+        later.verdict = "affected";
+        later.kev = true;
+        later.applies = "unclear";
+        later.priority = "later";
+        later.triagedBy = "ward";
+        Matcher::Finding open = later;
+        open.cve = "CVE-10";
+        open.applies.clear();
+        open.priority.clear();
+        const auto due = Notifier::due(QJsonArray{later.toJson(), open.toJson()}, {}, {});
+        QCOMPARE(due.size(), 1);
+        QCOMPARE(due.first().key, open.id());
+    }
+
+    void dockerListsOnlyCriticalOrExploited() {
+        auto f = [](const QString &sev, bool kev, const QString &fixed) {
+            Matcher::Finding x;
+            x.severity = sev;
+            x.kev = kev;
+            x.fixedIn = fixed;
+            return x;
+        };
+        const QList<Matcher::Finding> all{f("CRITICAL", false, "1"), f("HIGH", true, ""), f("HIGH", false, "2"),
+                                          f("LOW", false, ""), f("", false, "")};
+        int listed = 0;
+        for (const auto &x : all)
+            listed += Docker::listed(x);
+        QCOMPARE(listed, 2);
+        const QJsonObject c = Docker::counts(all);
+        QCOMPARE(c.value("total").toInt(), 5);
+        QCOMPARE(c.value("critical").toInt(), 1);
+        QCOMPARE(c.value("high").toInt(), 2);
+        QCOMPARE(c.value("unknown").toInt(), 1);
+        QCOMPARE(c.value("fixable").toInt(), 2);
+        QCOMPARE(c.value("exploited").toInt(), 1);
+    }
+
     void windowBackendReadsTheLastCheck() {
         QTemporaryDir dir;
         {

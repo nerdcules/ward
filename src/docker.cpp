@@ -137,6 +137,22 @@ QList<Matcher::Finding> parseTrivy(const QByteArray &json, const Image &img, con
     return out;
 }
 
+bool listed(const Matcher::Finding &f) { return f.kev || f.severity == "CRITICAL"; }
+
+QJsonObject counts(const QList<Matcher::Finding> &all) {
+    QJsonObject c{{"total", int(all.size())}};
+    int fixable = 0, exploited = 0;
+    for (const Matcher::Finding &f : all) {
+        const QString sev = f.severity.isEmpty() ? QString("UNKNOWN") : f.severity;
+        c.insert(sev.toLower(), c.value(sev.toLower()).toInt() + 1);
+        fixable += !f.fixedIn.isEmpty();
+        exploited += f.kev;
+    }
+    c.insert("fixable", fixable);
+    c.insert("exploited", exploited);
+    return c;
+}
+
 Run check(const QString &cacheDir, const Store &store, const QHash<QString, Feeds::Kev> &kev, bool offline) {
     Run r;
     if (QStandardPaths::findExecutable("docker").isEmpty()) {
@@ -162,7 +178,6 @@ Run check(const QString &cacheDir, const Store &store, const QHash<QString, Feed
     QDir().mkpath(dir);
     for (const Image &img : parseImages(images, containers)) {
         ++r.images;
-        r.exposure.insert("docker:" + img.id, QJsonObject{{"summary", exposureSummary(img)}});
         const QString path = dir + "/" + img.id.mid(7) + ".json";
         const QFileInfo cached(path);
         QByteArray json;
@@ -188,7 +203,27 @@ Run check(const QString &cacheDir, const Store &store, const QHash<QString, Feed
             }
             ++r.scanned;
         }
-        r.findings += parseTrivy(json, img, store, kev);
+        const QList<Matcher::Finding> all = parseTrivy(json, img, store, kev);
+        r.found += all.size();
+        int shown = 0;
+        for (Matcher::Finding f : all) {
+            if (!listed(f))
+                continue;
+            f.description = f.description.left(600);
+            r.findings << f;
+            ++shown;
+        }
+        const QJsonObject c = counts(all);
+        QString summary = exposureSummary(img);
+        if (!all.isEmpty())
+            summary += QString("; %1 CVEs in it (%2 critical, %3 high, %4 with a fixed version); listed: the %5 "
+                               "critical or exploited")
+                           .arg(all.size())
+                           .arg(c.value("critical").toInt())
+                           .arg(c.value("high").toInt())
+                           .arg(c.value("fixable").toInt())
+                           .arg(shown);
+        r.exposure.insert("docker:" + img.id, QJsonObject{{"summary", summary}, {"counts", c}});
     }
     return r;
 }

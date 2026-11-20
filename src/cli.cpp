@@ -113,7 +113,9 @@ void printFindings(QTextStream &out, const QJsonObject &state, bool all, bool li
             out << "Firmware: not checked: " << fw.value("error").toString() << ".\n";
         if (dk.value("available").toBool())
             out << "Docker: " << dk.value("images").toInt() << " images (" << dk.value("scanned").toInt()
-                << " scanned now, " << dk.value("cached").toInt() << " from today's scans)"
+                << " scanned now, " << dk.value("cached").toInt() << " from today's scans), "
+                << dk.value("found").toInt() << " findings in them, " << dk.value("listed").toInt()
+                << " listed (critical or exploited)"
                 << (dk.contains("error") ? "; " + dk.value("error").toString() : QString()) << ".\n";
         else
             out << "Docker: not checked: " << dk.value("error").toString() << ".\n";
@@ -384,7 +386,7 @@ int check(const QStringList &args, QTextStream &out, QTextStream &err) {
         }
         const Docker::Run dk = Docker::check(Paths::cache(), store, kev, offline);
         QJsonObject p{{"available", dk.available}, {"images", dk.images}, {"scanned", dk.scanned},
-                      {"cached", dk.cached}};
+                      {"cached", dk.cached}, {"found", dk.found}, {"listed", int(dk.findings.size())}};
         if (!dk.error.isEmpty())
             p.insert("error", dk.error);
         findings += dk.findings;

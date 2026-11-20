@@ -22,7 +22,9 @@ QList<Alert> due(const QJsonArray &findings, const QJsonArray &kernels, const QS
         const Matcher::Finding f = Matcher::Finding::fromJson(v.toObject());
         if (f.verdict != "affected" || notified.contains(f.id()))
             continue;
-        const bool urgent = f.priority == "now" || (f.kev && f.applies != "no");
+        // An exploited CVE alerts until triage says otherwise; one already
+        // judged or settled as "later" (in an image nothing runs, say) doesn't.
+        const bool urgent = f.priority == "now" || (f.kev && f.applies != "no" && f.priority != "later");
         if (!urgent)
             continue;
         out.append({f.id(), f.kev ? QCoreApplication::translate("Notifier", "%1 in %2 (exploited)").arg(f.cve, f.package)

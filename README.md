@@ -134,15 +134,26 @@ records sampled from that gap named products and versions.
   `fwupdmgr update`.
 - **Docker.** Every local image is scanned with `trivy image` once per image
   id and day (kept in `~/.cache/ward/trivy`). An image no running container
-  uses is settled by Ward as "later". Ward offers no command for an image or
-  a project; `ward fix` lists each vulnerable component and the version that
-  fixes it.
+  uses is settled by Ward as "later". Only an image's critical findings and
+  those on CISA's exploited list are listed; the rest are counted per image,
+  by severity, beside it (trivy's full report stays in the cache). Ward
+  offers no command for an image or a project; `ward fix` lists each
+  vulnerable component and the version that fixes it.
 
 Measured here on 20 Nov 2026: 77 lockfiles and restored projects gave 4,677
 dependencies, 1,411 distinct; 43 had advisories, which made 233 findings in
 17 projects. The first lookup, fetching 123 advisories, made the whole check
 take 42.6 s. fwupd knew 23 devices with no pending update (LVFS metadata
-from 4 Nov). Docker wasn't measured: trivy isn't installed here.
+from 4 Nov). trivy 0.76.1 scanned the 29 local images in 3 min 45 s for
+the whole check (its database download included): 162,561 findings, 156,541
+of them in Debian packages of old toolchain images (rust:1.70,
+python:3.8 and golang:1.21 on bookworm, and images built from them), and
+no container running. Listing all of them made findings.json 321 MB, so
+only critical or exploited ones are listed now: 2,046 in 21 images, and a
+6.6 MB file.
+
+The alert for an exploited CVE skips one already settled as "later", so
+those 217 in images nothing runs don't alert.
 
 ## How a package is matched
 
@@ -201,9 +212,9 @@ yt-dlp flaw, and an exploited OpenSSH flaw that needs musl without PAM.
 
 `ward.timer` is a systemd user timer the package installs; press T or run
 `ward schedule on`. It runs `ward check --notify` once a day. An alert goes
-out for findings triaged as "now", exploited ones triage hasn't ruled out,
-and a kernel branch kernel.org no longer maintains, each once (remembered in
-`~/.local/state/ward/notified.json`).
+out for findings triaged as "now", exploited ones triage hasn't ruled out or
+put off as "later", and a kernel branch kernel.org no longer maintains, each
+once (remembered in `~/.local/state/ward/notified.json`).
 
 ## Files
 
@@ -220,11 +231,11 @@ and a kernel branch kernel.org no longer maintains, each once (remembered in
 
 ## Tests
 
-`bin/test` builds and runs the Qt Test suite offscreen: on 20 Nov 2026, 36
+`bin/test` builds and runs the Qt Test suite offscreen: on 20 Nov 2026, 38
 passed, 0 failed, 0 skipped. CVE records, tracker groups and the OSV
 advisory in `tests/fixtures` are real ones fetched that day; the lockfiles,
 fwupd and trivy answers in the tests are made up in those tools' formats
-(trivy's has not been checked against a real scan); `claude-stub.sh` stands
+(Ward has since read 29 real trivy reports); `claude-stub.sh` stands
 in for Claude Code. Version order is checked against pacman's own `vercmp`
 on 27 pairs.
 

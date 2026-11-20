@@ -7,7 +7,8 @@
 
 // The desktop alert the daily check sends. Only what needs the user:
 // findings triaged as "now", findings on CISA's exploited list that triage
-// hasn't ruled out, and a kernel on a branch kernel.org no longer maintains.
+// hasn't ruled out or put off as "later", and a kernel on a branch
+// kernel.org no longer maintains.
 // Each is announced once (its key goes into notified.json).
 namespace Notifier {
 
