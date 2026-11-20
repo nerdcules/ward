@@ -1,0 +1,65 @@
+[
+ {
+  "name": "AVG-2843",
+  "packages": [
+   "vim"
+  ],
+  "status": "Unknown",
+  "severity": "Unknown",
+  "type": "unknown",
+  "affected": "9.0.1224-1",
+  "fixed": "9.0.1225-1",
+  "ticket": null,
+  "issues": [
+   "CVE-2023-0433",
+   "CVE-2023-0288",
+   "CVE-2023-0054",
+   "CVE-2023-0049",
+   "CVE-2022-47024",
+   "CVE-2022-3591",
+   "CVE-2022-3324",
+   "CVE-2022-3256",
+   "CVE-2022-3099",
+   "CVE-2022-2581",
+   "CVE-2022-2345",
+   "CVE-2022-0417",
+   "CVE-2022-0392"
+  ],
+  "advisories": []
+ },
+ {
+  "name": "AVG-2910",
+  "packages": [
+   "php-legacy"
+  ],
+  "status": "Fixed",
+  "severity": "Critical",
+  "type": "arbitrary code execution",
+  "affected": "8.1.13-1",
+  "fixed": "8.3.36-1",
+  "ticket": null,
+  "issues": [
+   "CVE-2026-109619",
+   "CVE-2026-109618"
+  ],
+  "advisories": [
+   "ASA-202610-2"
+  ]
+ },
+ {
+  "name": "AVG-2908",
+  "packages": [
+   "linux"
+  ],
+  "status": "Fixed",
+  "severity": "High",
+  "type": "privilege escalation",
+  "affected": "4.14.1-1",
+  "fixed": "6.19.12-1",
+  "ticket": null,
+  "issues": [
+   "CVE-2026-31431"
+  ],
+  "advisories": []
+ }
+]

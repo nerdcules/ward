@@ -1,0 +1,26 @@
+{
+  "%n CVEs": {
+    "one": "%n CVE",
+    "other": "%n CVEs"
+  },
+  "%n need you now": {
+    "one": "%n needs you now",
+    "other": "%n need you now"
+  },
+  "%n now": {
+    "one": "%n now",
+    "other": "%n now"
+  },
+  "%n soon": {
+    "one": "%n soon",
+    "other": "%n soon"
+  },
+  "%n security findings need you": {
+    "one": "%n security finding needs you",
+    "other": "%n security findings need you"
+  },
+  "and %n more": {
+    "one": "and %n more",
+    "other": "and %n more"
+  }
+}

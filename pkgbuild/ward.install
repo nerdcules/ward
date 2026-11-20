@@ -1,0 +1,7 @@
+post_install() {
+  echo "Turn on the daily check with: ward schedule on   (or press T in the window)"
+}
+
+post_upgrade() {
+  systemctl --global daemon-reload 2>/dev/null || true
+}

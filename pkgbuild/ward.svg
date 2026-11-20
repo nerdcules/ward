@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#16294a"/>
+      <stop offset="1" stop-color="#0a1020"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4cc9f0"/>
+      <stop offset="1" stop-color="#9d8cff"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4cc9f0"/>
+      <stop offset="1" stop-color="#9d8cff"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <rect x="1" y="1" width="62" height="62" rx="13" fill="none" stroke="url(#edge)" stroke-width="1.6" stroke-opacity="0.9"/>
+  <!-- A shield, with a tick: guarded, and checked. -->
+  <g fill="none" stroke="#4cc9f0" stroke-opacity="0.18" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 11 L50 18 V31 C50 42 42 50 32 54 C22 50 14 42 14 31 V18 Z"/>
+  </g>
+  <g fill="none" stroke="url(#ink)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 11 L50 18 V31 C50 42 42 50 32 54 C22 50 14 42 14 31 V18 Z"/>
+    <path d="M24 32 L30 38 L41 26"/>
+  </g>
+  <circle cx="32" cy="11" r="3.2" fill="#4cc9f0"/>
+</svg>

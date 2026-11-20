@@ -1,0 +1,8 @@
+[Unit]
+Description=Check this machine against the published CVEs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ward check --notify

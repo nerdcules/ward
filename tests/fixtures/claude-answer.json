@@ -1,0 +1,1 @@
+{"type":"result","is_error":false,"total_cost_usd":0.012,"result":"```json\n{\"verdicts\":[{\"cve\":\"CVE-1\",\"applies\":\"no\",\"priority\":\"later\",\"why\":\"needs musl\"},{\"cve\":\"CVE-2\",\"applies\":\"maybe\",\"priority\":\"now\",\"why\":\"x\"}],\"mitigation\":\"\"}\n```"}

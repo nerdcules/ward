@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Ward
+Name[da]=Ward
+Comment=See which published CVEs affect this machine
+Comment[da]=Se hvilke offentliggjorte CVE'er der rammer denne maskine
+Exec=ward
+Icon=ward
+Terminal=false
+Categories=Utility;System;Security;
+Keywords=cve;security;vulnerability;kernel;update;
+StartupWMClass=ward

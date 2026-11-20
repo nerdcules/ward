@@ -1,0 +1,34 @@
+{
+  "_about": "Package name -> extra product names to look up (products) and the only vendors that count (vendors). Names are compared lowercase, with spaces and underscores as hyphens. ~/.config/ward/names.json overrides these package by package.",
+  "python": {
+    "products": [
+      "cpython"
+    ],
+    "vendors": [
+      "python",
+      "python software foundation"
+    ]
+  },
+  "ruby": {
+    "vendors": [
+      "ruby-lang",
+      "ruby"
+    ]
+  },
+  "brotli": {
+    "vendors": [
+      "google"
+    ]
+  },
+  "snappy": {
+    "vendors": [
+      "google"
+    ]
+  },
+  "graphene": {
+    "vendors": [
+      "ebassi"
+    ]
+  },
+  "_why": "python, ruby, brotli: NVD matched microsoft:python (a VS Code extension), a GitLab CVE, and andybalholm:brotli (a Go port). snappy, graphene: CVE.org's only records are KnpLabs/dain snappy and silverks graphene, not google/snappy or ebassi/graphene (their URLs in pacman -Qi). Measured 2026-11-20."
+}

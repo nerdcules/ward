@@ -1,0 +1,29 @@
+pkgname=ward
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='See which published CVEs affect this machine, and which of them matter here'
+arch=('x86_64' 'aarch64')
+license=('MIT')
+depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'qt6-wayland' 'libarchive' 'pacman-contrib' 'iproute2' 'systemd' 'bash')
+optdepends=('claude-code: triage by Claude (the claude command on the PATH)'
+            'xdg-terminal-exec: run an update or mitigation from the window'
+            'libnotify: desktop alerts without Omarchy')
+makedepends=('gcc' 'make')
+install=ward.install
+source=()
+sha256sums=()
+
+build() {
+  cd "$startdir/.."
+  ./bin/build
+}
+
+package() {
+  cd "$startdir/.."
+  install -Dm755 build/ward "$pkgdir/usr/bin/ward"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$startdir/ward.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/ward.svg"
+  install -Dm644 "$startdir/ward.desktop" "$pkgdir/usr/share/applications/ward.desktop"
+  install -Dm644 "$startdir/ward.service" "$pkgdir/usr/lib/systemd/user/ward.service"
+  install -Dm644 "$startdir/ward.timer" "$pkgdir/usr/lib/systemd/user/ward.timer"
+}
